@@ -87,8 +87,6 @@ class Network:
 
         graph.grad_accum[graph.output_indices] = grad
 
-        launch_update_gradient_stats(graph, config)
-
         visited = torch.zeros(graph.num_neurons, dtype=torch.int32, device=self.device)
 
         queue = graph.output_indices.clone().to(torch.int32)
@@ -119,6 +117,7 @@ class Network:
             queue = next_queue[:count].clone()
             next_queue.zero_()
 
+        launch_update_gradient_stats(graph, config)
         launch_apply_gradients(graph, config)
 
         act_counts = graph.activation_counts.float()
