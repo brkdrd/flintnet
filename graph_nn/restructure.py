@@ -18,6 +18,7 @@ def restructure(graph: GraphData, config: Config) -> GraphData:
     neuron_type_np = graph.neuron_type.numpy()
     grad_mean_np = graph.gradient_running_mean.numpy()
     mean_act_np = graph.mean_activation_count.numpy()
+    has_cloned_np = graph.has_cloned.numpy()
 
     weight_mean_np = np.zeros(N, dtype=np.float32)
     out_counts = np.zeros(N, dtype=np.int32)
@@ -49,7 +50,7 @@ def restructure(graph: GraphData, config: Config) -> GraphData:
             high_err_high_w.append(int(idx))
         elif low_grad and low_w:
             low_err_low_w.append(int(idx))
-        elif low_grad and high_w:
+        elif low_grad and high_w and has_cloned_np[idx] == 0:
             to_clone.append(int(idx))
 
         if mean_act_np[idx] < config.low_activation_threshold:
@@ -70,9 +71,14 @@ def restructure(graph: GraphData, config: Config) -> GraphData:
 
     next_neuron_id = N
 
+    max_clones = max(1, len(hidden_indices) // 10)
+    if len(to_clone) > max_clones:
+        to_clone = list(np.random.choice(to_clone, max_clones, replace=False))
+
     for clone_src in to_clone:
         clone_id = next_neuron_id
         next_neuron_id += 1
+        has_cloned_np[clone_src] = 1
 
         new_neurons_defaults.append(graph.defaults[clone_src].item())
         new_neurons_type.append(1)
@@ -131,6 +137,7 @@ def restructure(graph: GraphData, config: Config) -> GraphData:
     new_grad_mean = np.zeros(total_new_N, dtype=np.float32)
     new_mean_act = np.zeros(total_new_N, dtype=np.float32)
     new_ntype = np.ones(total_new_N, dtype=np.int32)
+    new_has_cloned = np.zeros(total_new_N, dtype=np.int32)
 
     for old_idx, new_idx in old_to_new.items():
         if old_idx < N:
@@ -139,6 +146,7 @@ def restructure(graph: GraphData, config: Config) -> GraphData:
             new_grad_mean[new_idx] = old_grad_mean[old_idx]
             new_mean_act[new_idx] = old_mean_act[old_idx]
             new_ntype[new_idx] = old_ntype[old_idx]
+            new_has_cloned[new_idx] = has_cloned_np[old_idx]
 
     for i in range(num_new_neurons):
         new_idx = len(keep_neurons) + i
@@ -153,6 +161,7 @@ def restructure(graph: GraphData, config: Config) -> GraphData:
     new_graph.weight_mean = torch.zeros(total_new_N, dtype=torch.float32)
     new_graph.mean_activation_count = torch.from_numpy(new_mean_act)
     new_graph.neuron_type = torch.from_numpy(new_ntype)
+    new_graph.has_cloned = torch.from_numpy(new_has_cloned)
 
     new_graph.sources = torch.from_numpy(new_sources)
     new_graph.dests = torch.from_numpy(new_dests)

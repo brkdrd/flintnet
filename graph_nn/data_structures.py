@@ -28,6 +28,8 @@ class GraphData:
         self.out_offsets = None
         self.out_edge_indices = None
 
+        self.has_cloned = None
+
         self.input_indices = None
         self.output_indices = None
 
@@ -78,6 +80,7 @@ class GraphData:
             "values", "defaults", "activation_counts", "grad_accum",
             "gradient_running_mean", "weight_mean", "mean_activation_count",
             "neuron_type", "weights", "sources", "dests", "grad_accum_w",
+            "has_cloned",
             "in_offsets", "in_edge_indices", "out_offsets", "out_edge_indices",
             "input_indices", "output_indices",
         ]:

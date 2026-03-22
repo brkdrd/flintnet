@@ -30,6 +30,7 @@ def build_layered_graph(layer_sizes: list[int], device="cuda") -> GraphData:
         offset += size
     graph.neuron_type = neuron_type
 
+    graph.has_cloned = torch.zeros(N, dtype=torch.int32, device=device)
     graph.input_indices = torch.where(neuron_type == 0)[0].to(device)
     graph.output_indices = torch.where(neuron_type == 2)[0].to(device)
 
