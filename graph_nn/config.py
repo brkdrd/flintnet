@@ -15,4 +15,5 @@ class Config:
     low_activation_threshold: float = 1.0
     low_activation_window: int = 3
     gradient_ema_alpha: float = 0.1
+    restructure_top_n: int = 10
     loss_fn: str = "mse"

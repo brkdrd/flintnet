@@ -34,34 +34,29 @@ def restructure(graph: GraphData, config: Config) -> GraphData:
     hidden_indices = np.where(hidden_mask)[0]
 
     to_delete = set()
-    high_err_high_w = []
-    low_err_low_w = []
     to_clone = []
 
     for idx in hidden_indices:
-        high_grad = grad_mean_np[idx] > config.high_gradient_threshold
-        low_grad = grad_mean_np[idx] < config.low_gradient_threshold
-        high_w = weight_mean_np[idx] > config.high_weight_threshold
-        low_w = weight_mean_np[idx] < config.low_weight_threshold
-
-        if high_grad and low_w:
-            to_delete.add(int(idx))
-        elif high_grad and high_w:
-            high_err_high_w.append(int(idx))
-        elif low_grad and low_w:
-            low_err_low_w.append(int(idx))
-        elif low_grad and high_w and has_cloned_np[idx] == 0:
-            to_clone.append(int(idx))
-
         if mean_act_np[idx] < config.low_activation_threshold:
             to_delete.add(int(idx))
+        elif grad_mean_np[idx] < config.low_gradient_threshold \
+                and weight_mean_np[idx] > config.high_weight_threshold \
+                and has_cloned_np[idx] == 0:
+            to_clone.append(int(idx))
 
-    for h_neuron in high_err_high_w:
-        for donor in low_err_low_w:
-            if donor not in to_delete:
-                sources_np = np.append(sources_np, donor)
-                dests_np = np.append(dests_np, h_neuron)
-                weights_np = np.append(weights_np, np.float32(np.random.normal(0, 0.01)))
+    active_hidden = [idx for idx in hidden_indices if int(idx) not in to_delete]
+    if len(active_hidden) > 1:
+        hidden_grads = np.array([grad_mean_np[idx] for idx in active_hidden])
+        sorted_order = np.argsort(hidden_grads)
+        n = min(config.restructure_top_n, len(active_hidden) // 2)
+        if n > 0:
+            low_grad_neurons = [int(active_hidden[sorted_order[i]]) for i in range(n)]
+            high_grad_neurons = [int(active_hidden[sorted_order[-(i+1)]]) for i in range(n)]
+            for donor in low_grad_neurons:
+                for target in high_grad_neurons:
+                    sources_np = np.append(sources_np, donor)
+                    dests_np = np.append(dests_np, target)
+                    weights_np = np.append(weights_np, np.float32(np.random.normal(0, 0.01)))
 
     new_neurons_defaults = []
     new_neurons_type = []
