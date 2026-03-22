@@ -78,26 +78,16 @@ def restructure(graph: GraphData, config: Config) -> GraphData:
         new_neurons_type.append(1)
 
         in_edges = np.where(dests_np == clone_src)[0]
-        low_err_set = set(low_err_low_w) | set(to_clone)
-        eligible_in = [e for e in in_edges if int(sources_np[e]) in low_err_set]
-
-        np.random.shuffle(eligible_in)
-        split = len(eligible_in) // 2
-        for e in eligible_in[:split]:
+        for e in in_edges:
             new_edges_src.append(int(sources_np[e]))
             new_edges_dst.append(clone_id)
-            new_edges_w.append(float(weights_np[e]))
+            new_edges_w.append(float(weights_np[e]) + np.random.normal(0, 0.01))
 
         out_edges = np.where(sources_np == clone_src)[0]
-        high_w_set = set(high_err_high_w) | set(to_clone)
-        eligible_out = [e for e in out_edges if int(dests_np[e]) in high_w_set]
-
-        np.random.shuffle(eligible_out)
-        split_out = len(eligible_out) // 2
-        for e in eligible_out[:split_out]:
+        for e in out_edges:
             new_edges_src.append(clone_id)
             new_edges_dst.append(int(dests_np[e]))
-            new_edges_w.append(float(weights_np[e]))
+            new_edges_w.append(float(weights_np[e]) + np.random.normal(0, 0.01))
 
     keep_edges_mask = np.ones(len(sources_np), dtype=bool)
     for e_idx in range(len(sources_np)):
