@@ -72,6 +72,8 @@ class Network:
         graph = self.graph
         config = self.config
 
+        forward_act_counts = graph.activation_counts.float().clone()
+
         graph.grad_accum.zero_()
         graph.grad_accum_w.zero_()
 
@@ -122,10 +124,9 @@ class Network:
         launch_update_gradient_stats(graph, config)
         launch_apply_gradients(graph, config)
 
-        act_counts = graph.activation_counts.float()
         alpha = config.gradient_ema_alpha
         graph.mean_activation_count = (
-            (1.0 - alpha) * graph.mean_activation_count + alpha * act_counts
+            (1.0 - alpha) * graph.mean_activation_count + alpha * forward_act_counts
         )
 
         self.pass_counter += 1
