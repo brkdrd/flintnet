@@ -55,40 +55,41 @@ def forward_kernel(
         return
 
     neuron_idx = tl.load(batch_ptr + pid)
+
+    # Compute weighted sum (no-op for inputs since fan_in=0)
+    in_start = tl.load(in_offsets_ptr + neuron_idx)
+    in_end = tl.load(in_offsets_ptr + neuron_idx + 1)
+    fan_in = in_end - in_start
+
+    acc = tl.load(defaults_ptr + neuron_idx)
+
+    for i in range(MAX_FAN_IN):
+        if i < fan_in:
+            edge_idx = tl.load(in_edge_indices_ptr + in_start + i)
+            src = tl.load(sources_ptr + edge_idx)
+            w = tl.load(weights_ptr + edge_idx)
+            v = tl.load(values_ptr + src)
+            acc += w * v
+
+    activated = _activation(acc, activation_fn_id)
+
     ntype = tl.load(neuron_type_ptr + neuron_idx)
 
-    # Input neurons: use pre-set value, don't recompute
-    activated = tl.load(values_ptr + neuron_idx)
+    # Input neurons: use pre-set value instead of computed
+    if ntype == 0:
+        activated = tl.load(values_ptr + neuron_idx)
+    # Output neurons: use raw logits (no activation)
+    if ntype == 2:
+        activated = acc
 
+    # Store and update counts for non-input neurons
     if ntype != 0:
-        # Hidden/output: compute weighted sum from incoming edges
-        in_start = tl.load(in_offsets_ptr + neuron_idx)
-        in_end = tl.load(in_offsets_ptr + neuron_idx + 1)
-        fan_in = in_end - in_start
-
-        acc = tl.load(defaults_ptr + neuron_idx)
-
-        for i in range(MAX_FAN_IN):
-            if i < fan_in:
-                edge_idx = tl.load(in_edge_indices_ptr + in_start + i)
-                src = tl.load(sources_ptr + edge_idx)
-                w = tl.load(weights_ptr + edge_idx)
-                v = tl.load(values_ptr + src)
-                acc += w * v
-
-        # Hidden: apply activation; Output: raw logits (no activation)
-        if ntype == 1:
-            activated = _activation(acc, activation_fn_id)
-        else:
-            activated = acc
-
         tl.store(values_ptr + neuron_idx, activated)
-
         act_count = tl.load(activation_counts_ptr + neuron_idx)
         tl.store(activation_counts_ptr + neuron_idx, act_count + 1)
 
-        if ntype == 2:
-            tl.store(completion_flag_ptr, 1)
+    if ntype == 2:
+        tl.store(completion_flag_ptr, 1)
 
     if activated > activation_threshold:
         out_start = tl.load(out_offsets_ptr + neuron_idx)
@@ -101,7 +102,7 @@ def forward_kernel(
                 dest = tl.load(dests_ptr + edge_idx)
                 dest_act = tl.load(activation_counts_ptr + dest)
                 if dest_act < max_activations:
-                    was_queued = tl.atomic_or(queued_ptr + dest, 1)
+                    was_queued = tl.atomic_add(queued_ptr + dest, 1)
                     if was_queued == 0:
                         slot = tl.atomic_add(queue_counter_ptr, 1)
                         tl.store(next_queue_ptr + slot, dest)
@@ -142,13 +143,12 @@ def backward_kernel(
 
     neuron_val = tl.load(values_ptr + neuron_idx)
     neuron_grad = tl.load(grad_accum_ptr + neuron_idx)
+    deriv = _activation_deriv(neuron_val, activation_fn_id)
+    local_grad = neuron_grad * deriv
     ntype = tl.load(neuron_type_ptr + neuron_idx)
     # Output neurons have no activation, so derivative is 1.0
     if ntype == 2:
         local_grad = neuron_grad
-    else:
-        deriv = _activation_deriv(neuron_val, activation_fn_id)
-        local_grad = neuron_grad * deriv
 
     in_start = tl.load(in_offsets_ptr + neuron_idx)
     in_end = tl.load(in_offsets_ptr + neuron_idx + 1)
@@ -164,7 +164,7 @@ def backward_kernel(
 
             src_act = tl.load(activation_counts_ptr + src)
             if src_act > 0:
-                was_visited = tl.atomic_or(visited_ptr + src, 1)
+                was_visited = tl.atomic_add(visited_ptr + src, 1)
                 if was_visited == 0:
                     slot = tl.atomic_add(queue_counter_ptr, 1)
                     tl.store(next_queue_ptr + slot, src)
