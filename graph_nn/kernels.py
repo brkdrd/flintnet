@@ -43,6 +43,7 @@ def forward_kernel(
     next_queue_ptr,
     queue_counter_ptr,
     completion_flag_ptr,
+    queued_ptr,
     max_activations: tl.constexpr,
     activation_fn_id: tl.constexpr,
     activation_threshold: tl.constexpr,
@@ -100,8 +101,10 @@ def forward_kernel(
                 dest = tl.load(dests_ptr + edge_idx)
                 dest_act = tl.load(activation_counts_ptr + dest)
                 if dest_act < max_activations:
-                    slot = tl.atomic_add(queue_counter_ptr, 1)
-                    tl.store(next_queue_ptr + slot, dest)
+                    was_queued = tl.atomic_or(queued_ptr + dest, 1)
+                    if was_queued == 0:
+                        slot = tl.atomic_add(queue_counter_ptr, 1)
+                        tl.store(next_queue_ptr + slot, dest)
 
 
 @triton.jit
@@ -239,7 +242,7 @@ def get_activation_fn_id(name: str) -> int:
 
 
 def launch_forward_kernel(
-    batch_indices, graph, config, next_queue, queue_counter, completion_flag
+    batch_indices, graph, config, next_queue, queue_counter, completion_flag, queued
 ):
     batch_size = batch_indices.shape[0]
     if batch_size == 0:
@@ -269,6 +272,7 @@ def launch_forward_kernel(
         next_queue,
         queue_counter,
         completion_flag,
+        queued,
         max_activations=config.max_activations_per_neuron,
         activation_fn_id=get_activation_fn_id(config.activation_fn),
         activation_threshold=config.activation_threshold,

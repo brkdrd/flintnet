@@ -31,6 +31,7 @@ class Network:
         graph.activation_counts[input_indices] = 1
 
         completion_flag = torch.zeros(1, dtype=torch.int32, device=self.device)
+        queued = torch.zeros(graph.num_neurons, dtype=torch.int32, device=self.device)
 
         queue = graph.input_indices.clone().to(torch.int32)
         next_queue = torch.zeros(self.max_queue_size, dtype=torch.int32, device=self.device)
@@ -48,9 +49,10 @@ class Network:
                 break
 
             queue_counter.zero_()
+            queued.zero_()
 
             launch_forward_kernel(
-                queue, graph, config, next_queue, queue_counter, completion_flag
+                queue, graph, config, next_queue, queue_counter, completion_flag, queued
             )
 
             torch.cuda.synchronize()
