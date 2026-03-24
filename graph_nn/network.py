@@ -68,7 +68,7 @@ class Network:
         output_values = graph.values[graph.output_indices].clone()
         return output_values
 
-    def backward(self, targets: torch.Tensor):
+    def backward(self, targets: torch.Tensor, accuracy: float = 0.0):
         graph = self.graph
         config = self.config
 
@@ -130,7 +130,8 @@ class Network:
         )
 
         self.pass_counter += 1
-        if self.pass_counter % config.restructure_interval == 0:
+        if self.pass_counter % config.restructure_interval == 0 \
+                and accuracy >= config.restructure_accuracy_threshold:
             self.graph = restructure(self.graph, config)
             self.max_queue_size = self.graph.num_edges * 2
 

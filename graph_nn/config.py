@@ -16,4 +16,5 @@ class Config:
     low_activation_window: int = 3
     gradient_ema_alpha: float = 0.1
     restructure_top_n: int = 10
+    restructure_accuracy_threshold: float = 0.95
     loss_fn: str = "mse"
